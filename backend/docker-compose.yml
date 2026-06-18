@@ -1,0 +1,50 @@
+# =============================================
+# APK Sentinel — Docker Compose
+# =============================================
+# This file starts two background services:
+#   1. Redis   — stores the job queue (BullMQ)
+#   2. Qdrant  — vector database for semantic malware search
+#
+# Run: docker compose up -d
+# Stop: docker compose down
+# =============================================
+
+services:
+
+  # ----- Redis (Job Queue) -----
+  # Redis is an in-memory database.
+  # BullMQ uses it like a to-do list: 
+  # "hey, analyze this APK" → stored in Redis → worker picks it up
+  redis:
+    image: redis:7-alpine
+    container_name: apk-sentinel-redis
+    ports:
+      - "6379:6379"          # your app talks to localhost:6379
+    volumes:
+      - redis_data:/data     # persist data across container restarts
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----- Qdrant (Vector Database) -----
+  # Qdrant stores "vectors" — mathematical representations of text meaning.
+  # When you ask "is this code similar to known malware?" — Qdrant answers that.
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: apk-sentinel-qdrant
+    ports:
+      - "6333:6333"          # REST API — your app uses this
+      - "6334:6334"          # gRPC (not used now, but available)
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+    environment:
+      QDRANT__LOG_LEVEL: WARN
+
+# Named volumes — Docker manages storage for these
+volumes:
+  redis_data:
+  qdrant_data:
