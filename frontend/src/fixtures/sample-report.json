@@ -1,0 +1,33 @@
+{
+  "meta": { "jobId": "f846be0c-b634-41f6-bd9b-ee289616c75b", "generatedAt": "2026-06-18T15:38:50.480Z", "analysisVersion": "1.0.0", "filename": "HDFC_NetBanking.apk" },
+  "verdict": { "riskScore": 86, "severity": "CRITICAL", "recommendation": "BLOCK_IMMEDIATELY", "interpretation": "Risk score 86/100. This APK is almost certainly malicious. Multiple critical indicators found including credential theft, OTP interception, and C2 communication. Immediate action required." },
+  "narrative": {
+    "executiveSummary": "This APK impersonates HDFC Bank and operates as a fully functional banking trojan.",
+    "threatNarrative": "A victim installs what appears to be the HDFC NetBanking app, enters credentials on a convincing fake login screen, and the malware silently intercepts the follow-up OTP SMS before exfiltrating both to a remote server.",
+    "impactAssessment": { "immediateImpact": "Unauthorized access to user bank accounts", "financialRisk": "High risk of immediate financial fraud", "dataCompromised": ["SMS OTPs", "Contact lists", "Device metadata"] },
+    "evidenceHighlights": ["Observed HTTP POST containing OTP tokens to active C2 server", "Debug certificate inconsistent with production banking app"],
+    "recommendation": "BLOCK_IMMEDIATELY",
+    "recommendationReasoning": "Confirmed brand impersonation combined with functional C2 SMS exfiltration.",
+    "investigatorChecklist": ["Flag C2 IP/domain on firewall logs", "Notify fraud mitigation team"]
+  },
+  "staticAnalysis": {
+    "claimedIdentity": { "name": "HDFC NetBanking", "packageName": "com.fakepay.hdfc.mobile", "realPackageName": "com.hdfcbank.mobilebanking" },
+    "manifest": { "packageName": "com.fakepay.hdfc.mobile", "permissions": [ { "name": "android.permission.READ_SMS", "risk": "critical", "reason": "Can read OTP messages" }, { "name": "android.permission.INTERNET", "risk": "low", "reason": "Standard" } ] },
+    "certificate": { "issuer": "CN=Android Debug, O=Unknown, C=US", "isDebugCert": true, "sha256": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6" },
+    "suspiciousStrings": [ { "value": "http://185.234.219.33/collect", "type": "hardcoded_c2_url", "risk": "critical" } ]
+  },
+  "dynamicAnalysis": {
+    "sandboxDurationSeconds": 120,
+    "temporalAttackGraph": [ { "T": 0, "event": "APP_LAUNCH", "description": "App launched", "apiCall": "Activity.onCreate()", "risk": "low" }, { "T": 23, "event": "FIRST_C2_BEACON", "description": "First connection to C2", "apiCall": "HttpURLConnection.connect()", "risk": "critical", "detail": "POST collect" } ],
+    "networkActivity": [ { "timestamp": "T+23s", "method": "POST", "url": "http://185.234.219.33/collect", "classification": "C2_BEACON" } ],
+    "fridaHooks": [ { "api": "SmsManager.sendTextMessage", "called": true, "detail": "Called once" } ],
+    "intentSpoofingResults": { "scenario": "Spoofed SMS permission + root", "baselineBehavior": "Login screen only", "spoofedBehavior": "Keylogger activated", "behavioralDelta": "CRITICAL", "hiddenPayloadsRevealed": ["Full keylogger mode"] }
+  },
+  "genaiAnalysis": {
+    "identityGapAnalysis": { "identityGapScore": 85, "verdict": "LIKELY_FAKE", "confidence": "HIGH", "reasoning": "Package and certificate mismatch.", "claimedVsActualMismatches": ["Wrong package structure"], "criticalRedFlags": ["Requests SMS read without justification"] },
+    "codeDeobfuscation": { "actualPurpose": "SMS stealing trojan", "malwareFamilyGuess": "Anubis", "attackChainSummary": "Registers receiver, filters OTPs, uploads matches.", "patternAnalysis": [ { "pattern": "DexClassLoader", "plainEnglish": "Loads code at runtime", "severity": "CRITICAL" } ] },
+    "attackClassification": { "attackCategory": "BANKING_TROJAN", "attackPattern": "OTP Relay", "sophisticationLevel": "HIGH", "timeToFirstC2Seconds": 14, "timeToDataExfiltrationSeconds": 28, "knownCampaignSimilarity": "Campaign 2026-B", "immediateRiskToVictim": "Account drainage", "killChainPhases": [ { "phase": "Credential Access", "events": ["intercept_sms"], "mitreTechnique": "T1636.002" } ], "analystNotes": "Evasive delays bypass sandboxes." },
+    "spoofingAnalysis": { "stealthRating": "VERY_HIGH", "discoveryDifficulty": "HIGH", "evasionAnalysis": "Halts if ADB detected.", "triggerConditions": ["No ADB bridge"], "antiAnalysisTechniques": ["ADB detection"], "hiddenCapabilities": [ { "capability": "SMS Interception", "activationTrigger": "Incoming SMS", "severity": "CRITICAL" } ] }
+  },
+  "riskBreakdown": { "staticScore": 25, "dynamicScore": 23, "identityGapScore": 21, "stealthScore": 10, "vectorMatchScore": 7 }
+}

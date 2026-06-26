@@ -1,0 +1,104 @@
+/* =========================================================
+   APK SENTINEL — Design Tokens
+   Theme: "Forensic dossier console" — a sandbox readout
+   crossed with a case file. Phosphor-amber accent (not the
+   default green) because amber reads as an instrument glow,
+   not a hacker cliché. Mono face does double duty as both
+   data display and the visual signature of "raw evidence".
+   ========================================================= */
+
+:root {
+  /* Surfaces */
+  --bg: #0a0c0f;
+  --bg-grid: #0d1014;
+  --panel: #12151a;
+  --panel-raised: #161a21;
+  --panel-inset: #0e1116;
+  --border: #232932;
+  --border-soft: #1a1f27;
+
+  /* Text */
+  --text: #e7eaee;
+  --text-muted: #8b93a0;
+  --text-dim: #565e69;
+
+  /* Signature accent: phosphor amber */
+  --accent: #ffb454;
+  --accent-soft: #ffb45422;
+  --accent-strong: #ffcb7d;
+
+  /* Severity scale */
+  --critical: #ff4d5e;
+  --critical-soft: #ff4d5e1c;
+  --high: #ff8a3d;
+  --high-soft: #ff8a3d1c;
+  --medium: #ffd166;
+  --medium-soft: #ffd1661c;
+  --low: #2dd4bf;
+  --low-soft: #2dd4bf1c;
+
+  /* Type */
+  --font-display: 'Space Grotesk', 'Inter', sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  background-image:
+    linear-gradient(180deg, rgba(255,180,84,0.04), transparent 280px),
+    repeating-linear-gradient(0deg, var(--bg-grid) 0px, var(--bg-grid) 1px, transparent 1px, transparent 28px);
+  color: var(--text);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; }
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+/* Scrollbars — keep the instrument-panel feel */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--panel-inset); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+.mono { font-family: var(--font-mono); }
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.scanlines {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  opacity: 0.025;
+  background: repeating-linear-gradient(
+    0deg, #fff 0px, #fff 1px, transparent 1px, transparent 3px
+  );
+  mix-blend-mode: overlay;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
