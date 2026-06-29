@@ -1,4 +1,5 @@
 import { useState, Component } from 'react'
+import { Analytics } from '@vercel/analytics/react'
 import UploadPanel from './components/UploadPanel.jsx'
 import ScanConsole from './components/ScanConsole.jsx'
 import ReportView from './components/ReportView.jsx'
@@ -69,6 +70,7 @@ export default function App() {
 
   return (
     <div style={{ minHeight: '100%', padding: '48px 24px' }}>
+      <Analytics />
       <div className="scanlines" />
 
       {phase !== 'report' && (
