@@ -150,10 +150,32 @@ router.post('/analyze', upload.single('apk'), async (req, res) => {
       error: null
     })
 
+    // Set headers for streaming response
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+    if (res.flushHeaders) res.flushHeaders()
+
+    const sendChunk = (data) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`)
+      if (typeof res.flush === 'function') res.flush()
+    }
+
+    // Initial progress update
+    sendChunk({ progress: 5, message: 'Initializing pipeline environment...' })
+
+    const updateProgress = (pct, msg) => {
+      const job = jobStore.get(jobId)
+      if (job) {
+        job.progress = pct
+      }
+      sendChunk({ progress: pct, message: msg })
+    }
+
     // Run pipeline synchronously on the request
     let result
     try {
-      result = await runPipeline(jobId, filePath, filename, () => {})
+      result = await runPipeline(jobId, filePath, filename, updateProgress)
       jobStore.set(jobId, {
         status: 'completed',
         progress: 100,
@@ -164,6 +186,17 @@ router.post('/analyze', upload.single('apk'), async (req, res) => {
         error: null
       })
       logger.info('Job completed synchronously', { jobId, riskScore: result.riskScore })
+
+      // Send the final result payload
+      sendChunk({
+        success: true,
+        jobId,
+        status: 'completed',
+        progress: 100,
+        result
+      })
+      res.end()
+
     } catch (err) {
       jobStore.set(jobId, {
         status: 'failed',
@@ -175,20 +208,23 @@ router.post('/analyze', upload.single('apk'), async (req, res) => {
         error: err.message
       })
       logger.error('Job failed synchronously', { jobId, error: err.message })
-      throw err
+
+      sendChunk({
+        success: false,
+        jobId,
+        status: 'failed',
+        error: err.message
+      })
+      res.end()
     }
-
-    res.status(200).json({
-      success: true,
-      jobId,
-      status: 'completed',
-      message: 'APK analysis completed successfully.',
-      result
-    })
-
   } catch (error) {
     logger.error('Upload/analysis failed', { error: error.message })
-    res.status(500).json({ success: false, error: error.message })
+    // If headers are already sent, we must close the connection, not send a JSON error
+    if (res.headersSent) {
+      res.end()
+    } else {
+      res.status(500).json({ success: false, error: error.message })
+    }
   }
 })
 

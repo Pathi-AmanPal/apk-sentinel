@@ -12,39 +12,42 @@ export default function App() {
   const [jobId, setJobId] = useState(null)
   const [report, setReport] = useState(null)
   const [error, setError] = useState(null)
+  const [consoleLogs, setConsoleLogs] = useState([])
 
   async function handleSubmit(file) {
     setError(null)
-    setPhase('submitting')
     setFilename(file.name)
-    try {
-      const response = await uploadApk(file)
-      setJobId(response.jobId)
+    setProgress(0)
 
-      // If the backend processed it synchronously (like on Vercel)
+    const isLarge = file.size > 4 * 1024 * 1024
+    const initMsg = isLarge
+      ? 'APK size exceeds Vercel limit. Initializing metadata-only analysis...'
+      : 'Uploading APK package and establishing secure connection...'
+
+    setConsoleLogs([{ at: 0, line: initMsg }])
+    setPhase('scanning')
+
+    try {
+      const response = await uploadApk(file, {
+        onProgress: (p) => {
+          setProgress(p.progress)
+          setConsoleLogs((prev) => {
+            // Avoid duplicate log lines
+            if (prev.length > 0 && prev[prev.length - 1].line === p.message) {
+              return prev
+            }
+            return [...prev, { at: p.progress, line: p.message }]
+          })
+        }
+      })
+
+      setJobId(response.jobId)
       if (response.status === 'completed' && response.result) {
         setReport(response.result)
         setPhase('report')
-        return
+      } else {
+        throw new Error('Analysis completed but did not return report results.')
       }
-
-      // Fallback: poll status (useful for local development with background queues)
-      setPhase('scanning')
-      setProgress(0)
-
-      const finalStatus = await pollStatus(response.jobId, {
-        onTick: (s) => setProgress(s.progress ?? 0),
-      })
-
-      if (finalStatus.status === 'failed') {
-        setError(finalStatus.error || 'Analysis pipeline failed.')
-        setPhase('failed')
-        return
-      }
-
-      const { report } = await getReport(response.jobId)
-      setReport(report)
-      setPhase('report')
     } catch (err) {
       setError(err.message)
       setPhase('failed')
@@ -57,6 +60,7 @@ export default function App() {
     setJobId(null)
     setReport(null)
     setProgress(0)
+    setConsoleLogs([])
   }
 
   return (
@@ -82,13 +86,9 @@ export default function App() {
         <UploadPanel onSubmit={handleSubmit} disabled={false} />
       )}
 
-      {phase === 'submitting' && (
-        <UploadPanel onSubmit={() => {}} disabled={true} />
-      )}
-
       {(phase === 'scanning' || phase === 'failed') && (
         <>
-          <ScanConsole filename={filename} progress={progress} status={phase === 'failed' ? 'failed' : 'active'} />
+          <ScanConsole filename={filename} progress={progress} status={phase === 'failed' ? 'failed' : 'active'} logs={consoleLogs} />
           {phase === 'failed' && (
             <div style={{ maxWidth: 640, margin: '20px auto 0', textAlign: 'center' }}>
               <p className="mono" style={{ color: 'var(--critical)', fontSize: 13 }}>{error}</p>

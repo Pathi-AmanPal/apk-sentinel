@@ -17,11 +17,12 @@ async function asJson(res) {
   return data
 }
 
-export async function uploadApk(file) {
+export async function uploadApk(file, { onProgress } = {}) {
+  let res
   // If file size exceeds 4MB, send metadata instead of the whole file
   // to bypass Vercel's 4.5MB payload limit
   if (file.size > 4 * 1024 * 1024) {
-    const res = await fetch(`${API_URL}/analyze`, {
+    res = await fetch(`${API_URL}/analyze`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -31,13 +32,63 @@ export async function uploadApk(file) {
         fileSize: file.size
       })
     })
-    return asJson(res)
+  } else {
+    const form = new FormData()
+    form.append('apk', file)
+    res = await fetch(`${API_URL}/analyze`, { method: 'POST', body: form })
   }
 
-  const form = new FormData()
-  form.append('apk', file)
-  const res = await fetch(`${API_URL}/analyze`, { method: 'POST', body: form })
-  return asJson(res)
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    let errMessage = `Request failed (${res.status})`
+    try {
+      const parsed = JSON.parse(text)
+      if (parsed && parsed.error) errMessage = parsed.error
+    } catch (_) {}
+    throw new Error(errMessage)
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let finalResult = null
+
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) break
+
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop()
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed.startsWith('data: ')) {
+        try {
+          const payload = JSON.parse(trimmed.slice(6))
+          // Trigger progress updates
+          onProgress?.({
+            progress: payload.progress ?? 0,
+            message: payload.message || payload.error || ''
+          })
+          if (payload.status === 'completed' && payload.result) {
+            finalResult = payload
+          } else if (payload.status === 'failed') {
+            throw new Error(payload.error || 'Pipeline execution failed.')
+          }
+        } catch (e) {
+          if (e.message.includes('Pipeline execution failed')) throw e
+          console.warn('Could not parse chunk:', trimmed, e)
+        }
+      }
+    }
+  }
+
+  if (!finalResult) {
+    throw new Error('Analysis completed but did not return report results.')
+  }
+
+  return finalResult
 }
 
 export async function getStatus(jobId) {

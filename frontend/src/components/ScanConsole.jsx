@@ -1,33 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
-
-// Mirrors the exact progress checkpoints emitted by backend/src/core/pipeline.js
-// (10 → static, 25 → static done, 45 → dynamic done, 75 → genai done, 90 → risk+vector, 100 → report)
-const STAGES = [
-  { at: 0,  line: 'queueing job · awaiting worker pickup' },
-  { at: 10, line: 'stage 1/6 — static analysis: unpacking manifest, scanning permissions' },
-  { at: 25, line: 'stage 1/6 — static analysis complete: certificate + smali strings extracted' },
-  { at: 25, line: 'stage 2/6 — dynamic analysis: launching sandbox, attaching frida hooks' },
-  { at: 45, line: 'stage 2/6 — dynamic analysis complete: behavioral timeline captured' },
-  { at: 45, line: 'stage 3/6 — genai engine: dispatching 5-pillar threat assessment' },
-  { at: 75, line: 'stage 3/6 — genai engine: pillars 1–5 received' },
-  { at: 75, line: 'stage 4/6 — cross-referencing intent vectors against known malware families' },
-  { at: 90, line: 'stage 5/6 — composite risk score computed' },
-  { at: 90, line: 'stage 6/6 — compiling JSON + PDF dossier' },
-  { at: 100, line: 'pipeline complete — dossier ready' },
-]
-
-export default function ScanConsole({ filename, progress, status }) {
-  const [shown, setShown] = useState([])
-  const lastAt = useRef(-1)
-
-  useEffect(() => {
-    const next = STAGES.filter((s) => s.at <= progress && s.at > lastAt.current)
-    if (next.length) {
-      setShown((prev) => [...prev, ...next])
-      lastAt.current = Math.max(...next.map((s) => s.at))
-    }
-  }, [progress])
-
+export default function ScanConsole({ filename, progress, status, logs = [] }) {
   return (
     <div style={{
       background: 'var(--panel-inset)',
@@ -46,7 +17,7 @@ export default function ScanConsole({ filename, progress, status }) {
         <div style={{ color: 'var(--text)' }}>
           <span style={{ color: 'var(--accent)' }}>$</span> sentinel analyze <span style={{ color: 'var(--text-muted)' }}>{filename}</span>
         </div>
-        {shown.map((s, i) => (
+        {logs.map((s, i) => (
           <div key={i}>
             <span style={{ color: 'var(--text-dim)' }}>[{String(s.at).padStart(3, ' ')}%]</span> {s.line}
           </div>

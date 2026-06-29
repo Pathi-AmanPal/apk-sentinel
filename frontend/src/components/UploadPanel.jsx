@@ -96,6 +96,25 @@ export default function UploadPanel({ onSubmit, disabled, error }) {
       >
         {disabled ? 'Submitting…' : 'Open case — begin analysis'}
       </button>
+
+      <div style={{ marginTop: 22, textAlign: 'center' }}>
+        <span className="mono" style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+          Need a test file?{' '}
+          <a
+            href="/demo.apk"
+            download="demo.apk"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              color: 'var(--accent)',
+              textDecoration: 'underline',
+              cursor: 'pointer',
+              fontWeight: 500
+            }}
+          >
+            Download Demo APK (10 KB)
+          </a>
+        </span>
+      </div>
     </div>
   )
 }
