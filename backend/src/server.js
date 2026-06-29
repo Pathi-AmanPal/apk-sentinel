@@ -82,17 +82,20 @@ app.use((req, res, next) => {
 // So: POST /api/analyze, GET /api/status/:id, GET /api/report/:id
 app.use('/api', analysisRoutes)
 
-// Serve frontend static assets
-app.use(express.static(path.join(process.cwd(), 'backend/public')))
+// Serve frontend static assets (local dev: from frontend/dist, production: Vercel CDN handles this)
+const frontendDist = path.join(process.cwd(), 'frontend/dist')
+const backendPublic = path.join(process.cwd(), 'backend/public')
+const staticDir = existsSync(frontendDist) ? frontendDist : backendPublic
+app.use(express.static(staticDir))
 
 // Send index.html for all non-API routes to support React SPA client-side routing
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api')) {
     return next()
   }
-  const indexPath = path.join(process.cwd(), 'backend/public/index.html')
+  const indexPath = path.join(staticDir, 'index.html')
   if (!existsSync(indexPath)) {
-    return res.status(404).json({ success: false, error: 'Frontend build not found.' })
+    return res.status(404).json({ success: false, error: 'Frontend build not found. Run: cd frontend && npm run build' })
   }
   res.sendFile(indexPath)
 })
