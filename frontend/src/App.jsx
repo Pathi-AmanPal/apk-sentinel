@@ -18,12 +18,21 @@ export default function App() {
     setPhase('submitting')
     setFilename(file.name)
     try {
-      const { jobId } = await uploadApk(file)
-      setJobId(jobId)
+      const response = await uploadApk(file)
+      setJobId(response.jobId)
+
+      // If the backend processed it synchronously (like on Vercel)
+      if (response.status === 'completed' && response.result) {
+        setReport(response.result)
+        setPhase('report')
+        return
+      }
+
+      // Fallback: poll status (useful for local development with background queues)
       setPhase('scanning')
       setProgress(0)
 
-      const finalStatus = await pollStatus(jobId, {
+      const finalStatus = await pollStatus(response.jobId, {
         onTick: (s) => setProgress(s.progress ?? 0),
       })
 
@@ -33,7 +42,7 @@ export default function App() {
         return
       }
 
-      const { report } = await getReport(jobId)
+      const { report } = await getReport(response.jobId)
       setReport(report)
       setPhase('report')
     } catch (err) {

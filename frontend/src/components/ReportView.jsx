@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import VerdictStamp from './VerdictStamp.jsx'
 import { Panel, SectionHeader, Pill, Bar, KeyValueRow, severityColor, severitySoft } from './ui.jsx'
 import { pdfReportUrl } from '../api.js'
@@ -8,6 +9,36 @@ export default function ReportView({ jobId, report, onReset }) {
   const pillar2 = genaiAnalysis?.codeDeobfuscation
   const pillar3 = genaiAnalysis?.attackClassification
   const pillar5 = genaiAnalysis?.spoofingAnalysis
+
+  const [downloading, setDownloading] = useState(false)
+
+  async function handleDownloadPdf() {
+    setDownloading(true)
+    try {
+      const apiBase = import.meta.env.VITE_API_URL || '/api'
+      const res = await fetch(`${apiBase}/report/pdf`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ jobId, report })
+      })
+      if (!res.ok) throw new Error('PDF generation failed on server.')
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `apk-sentinel-report-${meta.filename}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (e) {
+      alert(`Error downloading PDF: ${e.message}`)
+    } finally {
+      setDownloading(false)
+    }
+  }
 
   return (
     <div style={{ maxWidth: 920, margin: '0 auto', paddingBottom: 80 }}>
@@ -23,9 +54,9 @@ export default function ReportView({ jobId, report, onReset }) {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <a href={pdfReportUrl(jobId)} target="_blank" rel="noreferrer" style={linkBtn}>
-            ↓ download PDF
-          </a>
+          <button onClick={handleDownloadPdf} disabled={downloading} style={linkBtn}>
+            {downloading ? 'Generating...' : '↓ download PDF'}
+          </button>
           <button onClick={onReset} style={ghostBtn}>+ new scan</button>
         </div>
       </div>
@@ -305,6 +336,7 @@ const linkBtn = {
   display: 'inline-flex', alignItems: 'center', textDecoration: 'none',
   fontFamily: 'var(--font-mono)', fontSize: 12, padding: '9px 14px',
   borderRadius: 'var(--radius-sm)', background: 'var(--accent)', color: '#1a1206', fontWeight: 600,
+  border: 'none', cursor: 'pointer',
 }
 const ghostBtn = {
   fontFamily: 'var(--font-mono)', fontSize: 12, padding: '9px 14px',

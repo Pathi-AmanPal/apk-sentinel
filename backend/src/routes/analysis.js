@@ -15,6 +15,7 @@ import { existsSync, writeFileSync, readFileSync, mkdirSync, readdirSync } from 
 
 import logger from '../utils/logger.js'
 import { runPipeline } from '../core/pipeline.js'
+import { generatePDFStream } from '../core/reportGenerator.js'
 
 const router = express.Router()
 
@@ -126,7 +127,7 @@ router.post('/analyze', upload.single('apk'), async (req, res) => {
       size: `${(req.file.size / 1024 / 1024).toFixed(2)} MB`
     })
 
-    // Store job in memory
+    // Store active state in memory initially
     jobStore.set(jobId, {
       status: 'active',
       progress: 0,
@@ -137,41 +138,40 @@ router.post('/analyze', upload.single('apk'), async (req, res) => {
       error: null
     })
 
-    // Run pipeline in background (don't await — return immediately)
-    // setImmediate pushes this to the next iteration of the event loop
-    // so the HTTP response is sent BEFORE the pipeline starts
-    setImmediate(async () => {
-      try {
-        const updateProgress = (pct) => {
-          const job = jobStore.get(jobId)
-          if (job) job.progress = pct
-        }
+    // Run pipeline synchronously on the request
+    let result
+    try {
+      result = await runPipeline(jobId, req.file.path, req.file.originalname, () => {})
+      jobStore.set(jobId, {
+        status: 'completed',
+        progress: 100,
+        filename: req.file.originalname,
+        filePath: req.file.path,
+        createdAt: new Date().toISOString(),
+        result,
+        error: null
+      })
+      logger.info('Job completed synchronously', { jobId, riskScore: result.riskScore })
+    } catch (err) {
+      jobStore.set(jobId, {
+        status: 'failed',
+        progress: 0,
+        filename: req.file.originalname,
+        filePath: req.file.path,
+        createdAt: new Date().toISOString(),
+        result: null,
+        error: err.message
+      })
+      logger.error('Job failed synchronously', { jobId, error: err.message })
+      throw err
+    }
 
-        const result = await runPipeline(jobId, req.file.path, req.file.originalname, updateProgress)
-
-        const job = jobStore.get(jobId)
-        job.status = 'completed'
-        job.progress = 100
-        job.result = result
-
-        logger.info('Job completed', { jobId, riskScore: result.riskScore })
-
-      } catch (err) {
-        const job = jobStore.get(jobId)
-        if (job) {
-          job.status = 'failed'
-          job.error = err.message
-        }
-        logger.error('Job failed', { jobId, error: err.message })
-      }
-    })
-
-    res.status(202).json({
+    res.status(200).json({
       success: true,
       jobId,
-      status: 'active',
-      message: 'APK analysis started. Poll /api/status/:jobId for updates.',
-      pollUrl: `/api/status/${jobId}`
+      status: 'completed',
+      message: 'APK analysis completed successfully.',
+      result
     })
 
   } catch (error) {
@@ -254,6 +254,24 @@ router.get('/jobs', (req, res) => {
     jobs.push({ jobId: id, status: job.status, filename: job.filename, progress: job.progress })
   }
   res.json({ success: true, count: jobs.length, jobs })
+})
+
+// ── Route 5: POST /api/report/pdf ──────────────────────────────────
+router.post('/report/pdf', async (req, res) => {
+  try {
+    const { jobId, report } = req.body
+    if (!report) {
+      return res.status(400).json({ success: false, error: 'No report data provided.' })
+    }
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename=apk-sentinel-report-${jobId}.pdf`)
+
+    generatePDFStream(report, res)
+  } catch (error) {
+    logger.error('PDF generation failed', { error: error.message })
+    res.status(500).json({ success: false, error: error.message })
+  }
 })
 
 export default router
