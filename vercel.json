@@ -1,14 +1,30 @@
 {
   "version": 2,
+  "buildCommand": "cd frontend && npm install && npm run build && cd ../backend && npm install",
+  "outputDirectory": "frontend/dist",
   "functions": {
     "api/index.js": {
-      "includeFiles": "backend/public/**"
+      "memory": 1024,
+      "maxDuration": 60,
+      "includeFiles": "backend/**"
     }
   },
   "routes": [
     {
+      "src": "/api/(.*)",
+      "dest": "/api/index.js"
+    },
+    {
+      "src": "/assets/(.*)",
+      "dest": "/assets/$1"
+    },
+    {
+      "src": "/(.*\\.(js|css|png|jpg|svg|ico|woff|woff2|ttf|webp|apk))",
+      "dest": "/$1"
+    },
+    {
       "src": "/(.*)",
-      "dest": "api/index.js"
+      "dest": "/index.html"
     }
   ]
 }

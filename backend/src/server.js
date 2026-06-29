@@ -22,7 +22,7 @@
 import 'dotenv/config'               // Load .env file into process.env
 import express from 'express'
 import cors from 'cors'
-import { mkdirSync } from 'fs'
+import { mkdirSync, existsSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
@@ -49,10 +49,19 @@ mkdirSync(outputDir, { recursive: true })
 // CORS: Allow requests from the frontend (Next.js will run on port 5173 or 3001)
 // Without this, the browser blocks cross-origin requests (security policy)
 app.use(cors({
-  origin: ['http://localhost:3001', 'http://localhost:5173', 'http://localhost:3000'],
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: (origin, callback) => {
+    // Allow all Vercel preview/production deployments, localhost, and null (direct API calls)
+    const allowed = !origin ||
+      origin.includes('localhost') ||
+      origin.includes('vercel.app') ||
+      origin.includes('apk-sentinel')
+    callback(null, allowed)
+  },
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }))
+app.options('*', cors())
 
 // Parse JSON request bodies — so req.body works for JSON requests
 app.use(express.json({ limit: '10mb' }))
@@ -76,12 +85,16 @@ app.use('/api', analysisRoutes)
 // Serve frontend static assets
 app.use(express.static(path.join(process.cwd(), 'backend/public')))
 
-// Send index.html for all other routes to support React SPA client-side routing
+// Send index.html for all non-API routes to support React SPA client-side routing
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api')) {
     return next()
   }
-  res.sendFile(path.join(process.cwd(), 'backend/public/index.html'))
+  const indexPath = path.join(process.cwd(), 'backend/public/index.html')
+  if (!existsSync(indexPath)) {
+    return res.status(404).json({ success: false, error: 'Frontend build not found.' })
+  }
+  res.sendFile(indexPath)
 })
 
 // ── 5. Global Error Handler ────────────────────────────────────────

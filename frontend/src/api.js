@@ -64,21 +64,26 @@ export async function uploadApk(file, { onProgress } = {}) {
     for (const line of lines) {
       const trimmed = line.trim()
       if (trimmed.startsWith('data: ')) {
+        let payload
         try {
-          const payload = JSON.parse(trimmed.slice(6))
-          // Trigger progress updates
-          onProgress?.({
-            progress: payload.progress ?? 0,
-            message: payload.message || payload.error || ''
-          })
-          if (payload.status === 'completed' && payload.result) {
-            finalResult = payload
-          } else if (payload.status === 'failed') {
-            throw new Error(payload.error || 'Pipeline execution failed.')
-          }
+          payload = JSON.parse(trimmed.slice(6))
         } catch (e) {
-          if (e.message.includes('Pipeline execution failed')) throw e
-          console.warn('Could not parse chunk:', trimmed, e)
+          console.warn('Could not parse SSE chunk:', trimmed, e)
+          continue
+        }
+
+        // Trigger progress updates only for non-empty messages
+        if (payload.progress !== undefined && payload.message) {
+          onProgress?.({
+            progress: payload.progress,
+            message: payload.message
+          })
+        }
+
+        if (payload.status === 'completed' && payload.result) {
+          finalResult = payload
+        } else if (payload.status === 'failed') {
+          throw new Error(payload.error || 'Pipeline execution failed.')
         }
       }
     }
