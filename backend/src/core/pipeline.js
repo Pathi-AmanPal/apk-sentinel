@@ -44,7 +44,7 @@ export async function runPipeline(jobId, filePath, filename, updateProgress) {
   updateProgress(90, 'Generating audit-ready PDF and JSON reports...')
 
   // Stage 6 – Save JSON + PDF
-  await generateReport(jobId, staticResults, dynamicResults, pillarResults, riskScore)
+  const { report: fullReport } = await generateReport(jobId, staticResults, dynamicResults, pillarResults, riskScore)
   updateProgress(100, 'Analysis completed successfully.')
 
   const duration = ((Date.now() - t0) / 1000).toFixed(1)
@@ -57,6 +57,8 @@ export async function runPipeline(jobId, filePath, filename, updateProgress) {
     recommendation: riskScore.recommendation,
     vectorMatch: vectorMatch?.matched ? vectorMatch.matchedFamily : null,
     durationSeconds: parseFloat(duration),
-    reportUrl: `/api/report/${jobId}`
+    reportUrl: `/api/report/${jobId}`,
+    // Include the full report so the frontend can render ReportView without a separate fetch
+    report: fullReport
   }
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, Component } from 'react'
 import UploadPanel from './components/UploadPanel.jsx'
 import ScanConsole from './components/ScanConsole.jsx'
 import ReportView from './components/ReportView.jsx'
@@ -43,7 +43,11 @@ export default function App() {
 
       setJobId(response.jobId)
       if (response.status === 'completed' && response.result) {
-        setReport(response.result)
+        const fullReport = response.result.report
+        if (!fullReport || !fullReport.meta) {
+          throw new Error('Report data is incomplete. Please try again.')
+        }
+        setReport(fullReport)
         setPhase('report')
       } else {
         throw new Error('Analysis completed but did not return report results.')
@@ -99,7 +103,9 @@ export default function App() {
       )}
 
       {phase === 'report' && report && (
-        <ReportView jobId={jobId} report={report} onReset={reset} />
+        <ErrorBoundary onReset={reset}>
+          <ReportView jobId={jobId} report={report} onReset={reset} />
+        </ErrorBoundary>
       )}
     </div>
   )
@@ -109,4 +115,28 @@ const resetBtn = {
   marginTop: 12, fontFamily: 'var(--font-mono)', fontSize: 12, padding: '9px 16px',
   borderRadius: 6, background: 'transparent', color: 'var(--text-muted)',
   border: '1px solid var(--border)', cursor: 'pointer',
+}
+
+// Catches any render crash in ReportView and shows a clean error instead of a black screen
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error }
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ maxWidth: 640, margin: '60px auto', textAlign: 'center' }}>
+          <p className="mono" style={{ color: 'var(--critical)', fontSize: 13, marginBottom: 16 }}>
+            ✕ Report render failed: {this.state.error?.message || 'Unknown error'}
+          </p>
+          <button onClick={this.props.onReset} style={resetBtn}>↺ try another file</button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
 }
