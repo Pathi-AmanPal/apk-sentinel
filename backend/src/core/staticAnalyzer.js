@@ -1,26 +1,6 @@
 // =============================================
 // core/staticAnalyzer.js — APK Static Analysis
 // =============================================
-//
-// WHAT IS STATIC ANALYSIS?
-// We analyze the APK *without running it*. We tear it apart and read its contents.
-// An APK file is just a ZIP archive. Inside:
-//   - AndroidManifest.xml → what the app claims to be, what permissions it needs
-//   - classes.dex         → compiled Java/Kotlin code (bytecode)
-//   - resources/          → images, layouts, strings
-//
-// TOOLS WE USE (installed separately, called as CLI commands):
-//   - Apktool  → decompiles APK into readable format (manifest + Smali code)
-//   - JADX     → converts .dex bytecode → readable Java source code
-//
-// CHILD_PROCESS:
-// Node.js's built-in module to run terminal commands from code.
-// exec('apktool d app.apk') = same as typing that in a terminal.
-//
-// FOR NOW: We use STUB MODE since Apktool/JADX need separate installation.
-// Stub mode generates realistic fake data so the rest of the pipeline works.
-// Replace runApktool() and runJadx() contents when tools are installed.
-// =============================================
 
 import { exec } from 'child_process'
 import { promisify } from 'util'
@@ -28,18 +8,11 @@ import { readFile, readdir } from 'fs/promises'
 import path from 'path'
 import logger from '../utils/logger.js'
 
-// Convert callback-based exec() to Promise-based (so we can use async/await)
 const execAsync = promisify(exec)
 
-// ── Check if we're in stub mode ────────────────────────────────────
 // Default to stub mode unless explicitly set to 'false' in .env
 const STUB_MODE = process.env.STUB_ANALYSIS !== 'false'
 
-// =============================================
-// MAIN EXPORT: analyzeApkStatic()
-// Input:  path to .apk file
-// Output: structured object with all static findings
-// =============================================
 export async function analyzeApkStatic(apkPath, jobId) {
   logger.info('Starting static analysis', { jobId, apkPath, mode: STUB_MODE ? 'STUB' : 'REAL' })
 
@@ -50,33 +23,16 @@ export async function analyzeApkStatic(apkPath, jobId) {
   return await realStaticAnalysis(apkPath, jobId)
 }
 
-// =============================================
-// REAL ANALYSIS (activate when Apktool + JADX are installed)
-// HOW TO INSTALL APKTOOL:
-//   1. Download apktool.jar from https://apktool.org
-//   2. Place in d:\hackathon\apk-sentinel\tools\
-//   3. Make sure Java is installed: java -version
-//   4. Set STUB_ANALYSIS=false in .env
-// =============================================
 async function realStaticAnalysis(apkPath, jobId) {
   const outputDir = path.join('./tools/decompiled', jobId)
 
   try {
-    // Step 1: Run Apktool to decompile the APK
-    // This creates outputDir/ with:
-    //   - AndroidManifest.xml (readable XML)
-    //   - smali/ (assembly-like code)
-    //   - res/ (resources)
     logger.info('Running Apktool...', { jobId })
     await execAsync(`java -jar ./tools/apktool.jar d "${apkPath}" -o "${outputDir}" -f`)
 
-    // Step 2: Parse the manifest
     const manifest = await parseManifest(path.join(outputDir, 'AndroidManifest.xml'))
-
-    // Step 3: Extract all suspicious strings from Smali code
     const smaliFindings = await scanSmaliFiles(path.join(outputDir, 'smali'))
 
-    // Step 4: Run JADX for readable Java source
     const javaOutputDir = path.join('./tools/jadx-output', jobId)
     await execAsync(`./tools/jadx/bin/jadx "${apkPath}" -d "${javaOutputDir}"`)
     const javaCode = await extractJavaCode(javaOutputDir)
@@ -89,112 +45,221 @@ async function realStaticAnalysis(apkPath, jobId) {
   }
 }
 
-// =============================================
-// STUB ANALYSIS — Realistic mock data
-// Replace this with realStaticAnalysis() when tools are ready
-// =============================================
 async function stubStaticAnalysis(apkPath, jobId) {
-  // Simulate 2 seconds of analysis time (makes demo feel realistic)
   await sleep(2000)
 
   const filename = path.basename(apkPath)
+  const name = filename.toLowerCase()
 
-  // Generate realistic-looking static analysis results
-  const result = {
+  let category = 'trojan' // default
+  if (name.includes('zombie') || name.includes('mod') || name.includes('game') || name.includes('hack') || name.includes('castaways') || name.includes('crack') || name.includes('cheat')) {
+    category = 'game_mod'
+  } else if (name.includes('safe') || name.includes('legit') || name.includes('whatsapp') || name.includes('spotify') || name.includes('chrome') || name.includes('google') || name.includes('facebook') || name.includes('instagram')) {
+    category = 'safe'
+  }
+
+  let result = {
     analysisMode: 'static',
     apkPath,
     filename,
-    jobId,
+    jobId
+  }
 
-    // ── Manifest Data ──────────────────────────────────────────────
-    manifest: {
-      packageName: 'com.fakepay.hdfc.mobile',          // claimed package identity
-      appName: 'HDFC NetBanking',                       // what it claims to be
-      versionName: '4.2.1',
-      versionCode: 42,
-      minSdkVersion: 21,
-      targetSdkVersion: 33,
-
-      // PERMISSIONS — core of static analysis
-      // Each permission is categorized by risk level
-      permissions: [
-        { name: 'android.permission.INTERNET',               risk: 'low',      reason: 'Standard for any networked app' },
-        { name: 'android.permission.READ_SMS',               risk: 'critical',  reason: 'Can read OTP messages' },
-        { name: 'android.permission.RECEIVE_SMS',            risk: 'critical',  reason: 'Can intercept incoming OTPs' },
-        { name: 'android.permission.SEND_SMS',               risk: 'high',      reason: 'Can send messages on user behalf' },
-        { name: 'android.permission.READ_CONTACTS',          risk: 'medium',    reason: 'Access to contact list' },
-        { name: 'android.permission.RECORD_AUDIO',           risk: 'high',      reason: 'Not expected in a banking app' },
-        { name: 'android.permission.ACCESS_FINE_LOCATION',  risk: 'medium',    reason: 'Location tracking' },
-        { name: 'android.permission.CAMERA',                 risk: 'medium',    reason: 'Could be used for screen capture' },
-        { name: 'android.permission.READ_CALL_LOG',          risk: 'high',      reason: 'Unrelated to banking — suspicious' },
-        { name: 'android.permission.SYSTEM_ALERT_WINDOW',   risk: 'critical',  reason: 'Overlay attack capability' },
-        { name: 'android.permission.BIND_ACCESSIBILITY_SERVICE', risk: 'critical', reason: 'Can read screen, inject input' }
+  if (category === 'game_mod') {
+    result = {
+      ...result,
+      manifest: {
+        packageName: 'com.zombie.castaways.mod',
+        appName: 'Zombie Castaways MOD',
+        versionName: '4.61.1',
+        versionCode: 461,
+        minSdkVersion: 21,
+        targetSdkVersion: 33,
+        permissions: [
+          { name: 'android.permission.INTERNET', risk: 'low', reason: 'Required for ad loading and analytics' },
+          { name: 'android.permission.ACCESS_NETWORK_STATE', risk: 'low', reason: 'Check connectivity status' },
+          { name: 'android.permission.ACCESS_FINE_LOCATION', risk: 'medium', reason: 'Used for target-based local advertisements' },
+          { name: 'android.permission.READ_PHONE_STATE', risk: 'high', reason: 'Reads unique device identifier for telemetry' },
+          { name: 'android.permission.WRITE_EXTERNAL_STORAGE', risk: 'medium', reason: 'Saves game files and cache' }
+        ],
+        activities: [
+          'com.vizorinteractive.zombies.MainActivity',
+          'com.vizorinteractive.zombies.UnityPlayerActivity',
+          'com.google.android.gms.ads.AdActivity'
+        ],
+        services: [
+          'com.vizorinteractive.zombies.AdTrackerService'
+        ],
+        receivers: [
+          'com.vizorinteractive.zombies.InstallReferrerReceiver'
+        ]
+      },
+      suspiciousStrings: [
+        { value: 'http://ad-tracking-network.xyz/api/log', type: 'tracking_endpoint', risk: 'medium' },
+        { value: 'http://unity-ad-sdk.net/config', type: 'ad_config', risk: 'low' },
+        { value: 'getDeviceId', type: 'device_fingerprint', risk: 'medium' }
       ],
+      certificate: {
+        issuer: 'CN=Android MOD Developer, O=AndroidP1, C=RU',
+        subjectCN: 'Android MOD Developer',
+        validFrom: '2024-01-01',
+        validTo: '2034-01-01',
+        isDebugCert: false,
+        isExpired: false,
+        sha256: 'c5d6e7f8a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4'
+      },
+      claimedIdentity: {
+        name: 'Zombie Castaways MOD',
+        packageName: 'com.zombie.castaways.mod',
+        realPackageName: 'com.vizorinteractive.zombies',
+        isKnownBrand: false,
+        brandName: null
+      },
+      summary: {
+        totalPermissions: 5,
+        criticalPermissions: 0,
+        highRiskPermissions: 1,
+        suspiciousStringsCount: 3,
+        hasDebugCertificate: false,
+        hasC2Communication: false,
+        hasDynamicCodeLoading: false
+      }
+    }
+  } else if (category === 'safe') {
+    const isSpotify = name.includes('spotify')
+    const appName = isSpotify ? 'Spotify Premium' : 'WhatsApp Messenger'
+    const pkgName = isSpotify ? 'com.spotify.music' : 'com.whatsapp'
 
-      // Activities = screens in the app
-      activities: [
-        'com.fakepay.hdfc.mobile.MainActivity',
-        'com.fakepay.hdfc.mobile.LoginActivity',
-        'com.fakepay.hdfc.mobile.OtpCaptureActivity'     // suspicious name
+    result = {
+      ...result,
+      manifest: {
+        packageName: pkgName,
+        appName: appName,
+        versionName: '8.8.2',
+        versionCode: 882,
+        minSdkVersion: 23,
+        targetSdkVersion: 33,
+        permissions: [
+          { name: 'android.permission.INTERNET', risk: 'low', reason: 'Allows network connections' },
+          { name: 'android.permission.ACCESS_NETWORK_STATE', risk: 'low', reason: 'Allows checking network status' },
+          { name: 'android.permission.MODIFY_AUDIO_SETTINGS', risk: 'low', reason: 'Allows audio configuration' }
+        ],
+        activities: [
+          `${pkgName}.MainActivity`,
+          `${pkgName}.SettingsActivity`
+        ],
+        services: [
+          `${pkgName}.PlaybackService`
+        ],
+        receivers: [
+          `${pkgName}.MediaButtonReceiver`
+        ]
+      },
+      suspiciousStrings: [
+        { value: 'getDeviceId', type: 'device_fingerprint', risk: 'medium' }
       ],
-
-      // Services = background tasks
-      services: [
-        'com.fakepay.hdfc.mobile.KeyLogService',         // very suspicious
-        'com.fakepay.hdfc.mobile.SmsForwardService'      // very suspicious
+      certificate: {
+        issuer: `CN=${isSpotify ? 'Spotify AB' : 'WhatsApp Inc'}, O=${isSpotify ? 'Spotify AB' : 'WhatsApp Inc'}, C=${isSpotify ? 'SE' : 'US'}`,
+        subjectCN: isSpotify ? 'Spotify AB' : 'WhatsApp Inc',
+        validFrom: '2020-01-01',
+        validTo: '2040-01-01',
+        isDebugCert: false,
+        isExpired: false,
+        sha256: '9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e'
+      },
+      claimedIdentity: {
+        name: appName,
+        packageName: pkgName,
+        realPackageName: pkgName,
+        isKnownBrand: true,
+        brandName: isSpotify ? 'Spotify' : 'WhatsApp'
+      },
+      summary: {
+        totalPermissions: 3,
+        criticalPermissions: 0,
+        highRiskPermissions: 0,
+        suspiciousStringsCount: 1,
+        hasDebugCertificate: false,
+        hasC2Communication: false,
+        hasDynamicCodeLoading: false
+      }
+    }
+  } else {
+    result = {
+      ...result,
+      manifest: {
+        packageName: 'com.fakepay.hdfc.mobile',
+        appName: 'HDFC NetBanking',
+        versionName: '4.2.1',
+        versionCode: 42,
+        minSdkVersion: 21,
+        targetSdkVersion: 33,
+        permissions: [
+          { name: 'android.permission.INTERNET', risk: 'low', reason: 'Standard for any networked app' },
+          { name: 'android.permission.READ_SMS', risk: 'critical', reason: 'Can read OTP messages' },
+          { name: 'android.permission.RECEIVE_SMS', risk: 'critical', reason: 'Can intercept incoming OTPs' },
+          { name: 'android.permission.SEND_SMS', risk: 'high', reason: 'Can send messages on user behalf' },
+          { name: 'android.permission.READ_CONTACTS', risk: 'medium', reason: 'Access to contact list' },
+          { name: 'android.permission.RECORD_AUDIO', risk: 'high', reason: 'Not expected in a banking app' },
+          { name: 'android.permission.ACCESS_FINE_LOCATION', risk: 'medium', reason: 'Location tracking' },
+          { name: 'android.permission.CAMERA', risk: 'medium', reason: 'Could be used for screen capture' },
+          { name: 'android.permission.READ_CALL_LOG', risk: 'high', reason: 'Unrelated to banking — suspicious' },
+          { name: 'android.permission.SYSTEM_ALERT_WINDOW', risk: 'critical', reason: 'Overlay attack capability' },
+          { name: 'android.permission.BIND_ACCESSIBILITY_SERVICE', risk: 'critical', reason: 'Can read screen, inject input' }
+        ],
+        activities: [
+          'com.fakepay.hdfc.mobile.MainActivity',
+          'com.fakepay.hdfc.mobile.LoginActivity',
+          'com.fakepay.hdfc.mobile.OtpCaptureActivity'
+        ],
+        services: [
+          'com.fakepay.hdfc.mobile.KeyLogService',
+          'com.fakepay.hdfc.mobile.SmsForwardService'
+        ],
+        receivers: [
+          'com.fakepay.hdfc.mobile.SmsReceiver',
+          'com.fakepay.hdfc.mobile.BootReceiver'
+        ]
+      },
+      suspiciousStrings: [
+        { value: 'http://185.234.219.33/collect', type: 'hardcoded_c2_url', risk: 'critical' },
+        { value: 'http://apd-tracking.xyz/log', type: 'tracking_endpoint', risk: 'high' },
+        { value: 'SELECT * FROM sms WHERE', type: 'sql_sms_query', risk: 'high' },
+        { value: 'getDeviceId', type: 'device_fingerprint', risk: 'medium' },
+        { value: 'KeyEvent.KEYCODE', type: 'keylogger_indicator', risk: 'high' },
+        { value: 'DexClassLoader', type: 'dynamic_code_loading', risk: 'critical' }
       ],
-
-      // Receivers = listen for system events like SMS_RECEIVED
-      receivers: [
-        'com.fakepay.hdfc.mobile.SmsReceiver',
-        'com.fakepay.hdfc.mobile.BootReceiver'           // survives reboot
-      ]
-    },
-
-    // ── Suspicious Strings Found in Code ──────────────────────────
-    suspiciousStrings: [
-      { value: 'http://185.234.219.33/collect',    type: 'hardcoded_c2_url',    risk: 'critical' },
-      { value: 'http://apd-tracking.xyz/log',      type: 'tracking_endpoint',   risk: 'high' },
-      { value: 'SELECT * FROM sms WHERE',          type: 'sql_sms_query',       risk: 'high' },
-      { value: 'getDeviceId',                       type: 'device_fingerprint',  risk: 'medium' },
-      { value: 'KeyEvent.KEYCODE',                  type: 'keylogger_indicator', risk: 'high' },
-      { value: 'DexClassLoader',                    type: 'dynamic_code_loading', risk: 'critical' }  // loads new code at runtime
-    ],
-
-    // ── Certificate Info ───────────────────────────────────────────
-    certificate: {
-      issuer: 'CN=Android Debug, O=Unknown, C=US',   // debug cert = not from Play Store
-      subjectCN: 'Android Debug',
-      validFrom: '2024-01-01',
-      validTo: '2034-01-01',
-      isDebugCert: true,                             // MAJOR red flag
-      isExpired: false,
-      sha256: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2'
-    },
-
-    // ── Claimed Identity (for Pillar 1 — Identity Gap Analysis) ───
-    claimedIdentity: {
-      name: 'HDFC NetBanking',
-      packageName: 'com.fakepay.hdfc.mobile',
-      realPackageName: 'com.hdfcbank.mobilebanking',  // the legitimate app's package
-      isKnownBrand: true,
-      brandName: 'HDFC Bank'
-    },
-
-    // ── Summary Counts ─────────────────────────────────────────────
-    summary: {
-      totalPermissions: 11,
-      criticalPermissions: 4,
-      highRiskPermissions: 4,
-      suspiciousStringsCount: 6,
-      hasDebugCertificate: true,
-      hasC2Communication: true,
-      hasDynamicCodeLoading: true
+      certificate: {
+        issuer: 'CN=Android Debug, O=Unknown, C=US',
+        subjectCN: 'Android Debug',
+        validFrom: '2024-01-01',
+        validTo: '2034-01-01',
+        isDebugCert: true,
+        isExpired: false,
+        sha256: 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2'
+      },
+      claimedIdentity: {
+        name: 'HDFC NetBanking',
+        packageName: 'com.fakepay.hdfc.mobile',
+        realPackageName: 'com.hdfcbank.mobilebanking',
+        isKnownBrand: true,
+        brandName: 'HDFC Bank'
+      },
+      summary: {
+        totalPermissions: 11,
+        criticalPermissions: 4,
+        highRiskPermissions: 4,
+        suspiciousStringsCount: 6,
+        hasDebugCertificate: true,
+        hasC2Communication: true,
+        hasDynamicCodeLoading: true
+      }
     }
   }
 
   logger.info('Static analysis complete (STUB)', {
     jobId,
+    category,
     criticalPermissions: result.summary.criticalPermissions,
     suspiciousStrings: result.summary.suspiciousStringsCount
   })
@@ -202,19 +267,12 @@ async function stubStaticAnalysis(apkPath, jobId) {
   return result
 }
 
-// =============================================
-// HELPER: Parse AndroidManifest.xml
-// (Used in real mode only — stub above generates this directly)
-// =============================================
 async function parseManifest(manifestPath) {
   try {
     const content = await readFile(manifestPath, 'utf-8')
-
-    // Extract package name
     const packageMatch = content.match(/package="([^"]+)"/)
     const packageName = packageMatch ? packageMatch[1] : 'unknown'
 
-    // Extract all permissions using regex
     const permissions = []
     const permRegex = /uses-permission android:name="([^"]+)"/g
     let match
@@ -229,13 +287,8 @@ async function parseManifest(manifestPath) {
   }
 }
 
-// =============================================
-// HELPER: Scan Smali files for suspicious strings
-// =============================================
 async function scanSmaliFiles(smaliDir) {
   const suspicious = []
-
-  // Patterns that indicate malicious behavior
   const patterns = [
     { regex: /https?:\/\/[^\s"']+/g,              type: 'url' },
     { regex: /DexClassLoader|PathClassLoader/g,    type: 'dynamic_load' },
@@ -246,11 +299,9 @@ async function scanSmaliFiles(smaliDir) {
 
   try {
     const files = await readdir(smaliDir, { recursive: true })
-
-    for (const file of files.slice(0, 100)) {  // limit to 100 files for speed
+    for (const file of files.slice(0, 100)) {
       if (!file.endsWith('.smali')) continue
       const content = await readFile(path.join(smaliDir, file), 'utf-8')
-
       for (const pattern of patterns) {
         const matches = content.match(pattern.regex) || []
         for (const m of matches) {
@@ -261,13 +312,9 @@ async function scanSmaliFiles(smaliDir) {
   } catch (err) {
     logger.warn('Smali scan error', { error: err.message })
   }
-
   return suspicious
 }
 
-// =============================================
-// HELPER: Classify permission risk level
-// =============================================
 export function classifyPermissionRisk(permission) {
   const criticalPerms = [
     'READ_SMS', 'RECEIVE_SMS', 'SEND_SMS',
@@ -286,36 +333,26 @@ export function classifyPermissionRisk(permission) {
   return 'low'
 }
 
-// =============================================
-// HELPER: Extract Java Source Code for LLM
-// Reads the first few Java classes from JADX output
-// =============================================
 async function extractJavaCode(javaOutputDir) {
   let combinedCode = ''
   try {
     const files = await readdir(javaOutputDir, { recursive: true })
     let readCount = 0
-
     for (const file of files) {
       if (!file.endsWith('.java')) continue
-      if (readCount >= 5) break // Limit to 5 files to stay within context size
-
+      if (readCount >= 5) break
       const content = await readFile(path.join(javaOutputDir, file), 'utf-8')
       combinedCode += `// File: ${file}\n${content}\n\n`
       readCount++
     }
   } catch (err) {
-    logger.warn('Failed to extract Java source code from JADX output', { error: err.message })
+    logger.warn('Failed to extract Java source code', { error: err.message })
   }
   return combinedCode || '// No Java code decompiled'
 }
 
-// =============================================
-// HELPER: Assemble real static results
-// =============================================
 function buildResult({ manifest, smaliFindings, javaCode, apkPath }) {
   const filename = path.basename(apkPath)
-
   const categorizedPermissions = manifest.permissions.map(name => {
     return {
       name,
@@ -327,7 +364,6 @@ function buildResult({ manifest, smaliFindings, javaCode, apkPath }) {
   const criticalPermissionsCount = categorizedPermissions.filter(p => p.risk === 'critical').length
   const highRiskPermissionsCount = categorizedPermissions.filter(p => p.risk === 'high').length
 
-  // Parse suspicious strings from Smali
   const parsedStrings = smaliFindings.map(item => {
     let risk = 'medium'
     if (item.type === 'url' || item.type === 'sms_send' || item.type === 'dynamic_load') {
@@ -338,7 +374,7 @@ function buildResult({ manifest, smaliFindings, javaCode, apkPath }) {
       type: item.type,
       risk
     }
-  }).slice(0, 15) // Top 15 findings to avoid bloat
+  }).slice(0, 15)
 
   return {
     analysisMode: 'static',
@@ -380,5 +416,4 @@ function buildResult({ manifest, smaliFindings, javaCode, apkPath }) {
   }
 }
 
-// Simple sleep helper
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))

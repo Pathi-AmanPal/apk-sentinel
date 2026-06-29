@@ -74,157 +74,282 @@ export async function analyzeApkDynamic(apkPath, jobId, staticResults) {
 async function stubDynamicAnalysis(apkPath, jobId, staticResults) {
   await sleep(3000)  // simulate sandbox execution time
 
-  const result = {
+  const packageName = staticResults?.manifest?.packageName || 'com.fakepay.hdfc.mobile'
+
+  let result = {
     analysisMode: 'dynamic',
     jobId,
-    sandboxDurationSeconds: 120,
+    sandboxDurationSeconds: 120
+  }
 
-    // ── Temporal Attack Graph ──────────────────────────────────────
-    // This is Pillar 3: a timeline of what the malware does step by step
-    // T = seconds after launch
-    temporalAttackGraph: [
-      {
-        T: 0,
-        event: 'APP_LAUNCH',
-        description: 'App launched, shows fake HDFC login screen',
-        apiCall: 'Activity.onCreate()',
-        risk: 'low'
+  if (packageName === 'com.zombie.castaways.mod') {
+    result = {
+      ...result,
+      temporalAttackGraph: [
+        {
+          T: 0,
+          event: 'APP_LAUNCH',
+          description: 'App launched, initializes Unity Engine graphics thread',
+          apiCall: 'UnityPlayerActivity.onCreate()',
+          risk: 'low'
+        },
+        {
+          T: 4,
+          event: 'AD_INITIALIZATION',
+          description: 'Google AdMob / Unity Ads SDK initialized in background',
+          apiCall: 'MobileAds.initialize()',
+          risk: 'low'
+        },
+        {
+          T: 10,
+          event: 'LOCATION_ACCESS',
+          description: 'Queries exact device GPS location for targeting advertisements',
+          apiCall: 'LocationManager.getLastKnownLocation()',
+          risk: 'medium',
+          detail: 'Sent location telemetry to tracking servers'
+        },
+        {
+          T: 18,
+          event: 'TELEMETRY_SEND',
+          description: 'Outbound HTTP ping to ad network with unique phone identifier (IMEI)',
+          apiCall: 'HttpURLConnection.connect()',
+          risk: 'high',
+          detail: 'POST http://ad-tracking-network.xyz/api/log'
+        }
+      ],
+      networkActivity: [
+        {
+          timestamp: 'T+18s',
+          method: 'POST',
+          url: 'http://ad-tracking-network.xyz/api/log',
+          size: '1.2 KB',
+          payload: '{"device_id":"8732d8ae","app":"com.zombie.castaways.mod","gps":"55.7558,37.6173"}',
+          classification: 'AD_TELEMETRY'
+        },
+        {
+          timestamp: 'T+24s',
+          method: 'GET',
+          url: 'http://unity-ad-sdk.net/config',
+          size: '4.8 KB',
+          classification: 'AD_CONFIG'
+        }
+      ],
+      fridaHooks: [
+        { api: 'TelephonyManager.getDeviceId', called: true, detail: 'IMEI read detected by AdTrackerService' },
+        { api: 'LocationManager.getLastKnownLocation', called: true, detail: 'GPS coordinate reading triggered' },
+        { api: 'SmsManager.sendTextMessage', called: false, detail: 'No SMS actions performed' },
+        { api: 'Cipher.doFinal', called: false, detail: 'No heavy crypto operations' }
+      ],
+      intentSpoofingResults: {
+        scenario: 'Told the app location permission is denied and phone is debugged',
+        baselineBehavior: 'App requested location and registered ads.',
+        spoofedBehavior: 'App fell back to IP-based approximate location for ads.',
+        behavioralDelta: 'LOW — No hidden ransomware or banking overlays triggered.',
+        hiddenPayloadsRevealed: []
       },
-      {
-        T: 3,
-        event: 'PERMISSION_CHECK',
-        description: 'Checks if SMS permission is granted',
-        apiCall: 'checkSelfPermission(READ_SMS)',
-        risk: 'medium'
-      },
-      {
-        T: 7,
-        event: 'TARGET_APP_SCAN',
-        description: 'Scans for installed banking apps (HDFC, SBI, ICICI, Axis)',
-        apiCall: 'PackageManager.getInstalledPackages()',
-        risk: 'high',
-        detail: 'Found: com.hdfcbank.mobilebanking, com.sbi.mobile'
-      },
-      {
-        T: 12,
-        event: 'CREDENTIALS_CAPTURE',
-        description: 'User enters credentials on fake login screen — captured by keylogger',
-        apiCall: 'EditText.addTextChangedListener()',
-        risk: 'critical',
-        detail: 'Credentials staged for exfiltration'
-      },
-      {
-        T: 15,
-        event: 'SMS_INTERCEPT_ARM',
-        description: 'Registers SMS broadcast receiver — ready to intercept OTPs',
-        apiCall: 'registerReceiver(SmsReceiver, SMS_RECEIVED)',
-        risk: 'critical'
-      },
-      {
-        T: 23,
-        event: 'FIRST_C2_BEACON',
-        description: 'First connection to command-and-control server',
-        apiCall: 'HttpURLConnection.connect()',
-        risk: 'critical',
-        detail: 'POST http://185.234.219.33/collect — device fingerprint sent'
-      },
-      {
-        T: 31,
-        event: 'OTP_INTERCEPT',
-        description: 'Incoming SMS intercepted (bank OTP)',
-        apiCall: 'BroadcastReceiver.onReceive(SMS_RECEIVED)',
-        risk: 'critical',
-        detail: 'OTP hidden from user notifications'
-      },
-      {
-        T: 33,
-        event: 'CREDENTIAL_EXFIL',
-        description: 'Captured credentials + OTP sent to C2 server',
-        apiCall: 'HttpURLConnection.connect()',
-        risk: 'critical',
-        detail: 'POST http://185.234.219.33/collect — 847 bytes'
-      },
-      {
-        T: 45,
-        event: 'OVERLAY_LAUNCH',
-        description: 'SYSTEM_ALERT_WINDOW overlay shown to display fake "processing" screen while fraud occurs',
-        apiCall: 'WindowManager.addView(TYPE_APPLICATION_OVERLAY)',
-        risk: 'critical'
-      },
-      {
-        T: 90,
-        event: 'PERSISTENCE_SETUP',
-        description: 'Boot receiver registered — malware survives device restart',
-        apiCall: 'ACTION_BOOT_COMPLETED registered',
-        risk: 'high'
+      summary: {
+        totalEvents: 4,
+        criticalEvents: 0,
+        c2Connections: 1,
+        credentialsExfiltrated: false,
+        otpIntercepted: false,
+        persistenceMechanism: false,
+        overlayAttack: false,
+        dynamicCodeLoading: false
       }
-    ],
-
-    // ── Network Activity ───────────────────────────────────────────
-    networkActivity: [
-      {
-        timestamp: 'T+23s',
-        method: 'POST',
-        url: 'http://185.234.219.33/collect',
-        size: '312 bytes',
-        payload: '{"device_id":"a3f9b2c1","phone":"91XXXXXXXX10","imei":"3599..."}',
-        classification: 'C2_BEACON'
+    }
+  } else if (packageName.includes('spotify') || packageName.includes('whatsapp')) {
+    const isSpotify = packageName.includes('spotify')
+    result = {
+      ...result,
+      temporalAttackGraph: [
+        {
+          T: 0,
+          event: 'APP_LAUNCH',
+          description: `Clean launch of ${isSpotify ? 'Spotify' : 'WhatsApp'} activity player`,
+          apiCall: 'Activity.onCreate()',
+          risk: 'low'
+        },
+        {
+          T: 5,
+          event: 'SECURE_CHANNEL',
+          description: 'Established TLS 1.3 secure connection with official API endpoints',
+          apiCall: 'SSLSocket.connect()',
+          risk: 'low'
+        }
+      ],
+      networkActivity: [
+        {
+          timestamp: 'T+5s',
+          method: 'CONNECT',
+          url: isSpotify ? 'https://ap.spotify.com:443' : 'https://g.whatsapp.net:443',
+          size: '12 KB',
+          classification: 'OFFICIAL_TRAFFIC'
+        }
+      ],
+      fridaHooks: [
+        { api: 'TelephonyManager.getDeviceId', called: false, detail: 'No sensitive identifier reads' },
+        { api: 'SmsManager.sendTextMessage', called: false, detail: 'No SMS activity' },
+        { api: 'Cipher.doFinal', called: true, detail: 'Encrypted cache stream standard usage' }
+      ],
+      intentSpoofingResults: {
+        scenario: 'Injected rooted environment variables',
+        baselineBehavior: 'Normal operation.',
+        spoofedBehavior: 'App runs normally with safety net check warning.',
+        behavioralDelta: 'NONE — Zero malicious payload changes detected.',
+        hiddenPayloadsRevealed: []
       },
-      {
-        timestamp: 'T+33s',
-        method: 'POST',
-        url: 'http://185.234.219.33/collect',
-        size: '847 bytes',
-        payload: '{"user":"test@hdfc","pass":"[CAPTURED]","otp":"247891"}',
-        classification: 'CREDENTIAL_EXFILTRATION'
-      },
-      {
-        timestamp: 'T+61s',
-        method: 'GET',
-        url: 'http://apd-tracking.xyz/log?id=a3f9b2c1',
-        size: '128 bytes',
-        classification: 'TRACKING_PING'
+      summary: {
+        totalEvents: 2,
+        criticalEvents: 0,
+        c2Connections: 0,
+        credentialsExfiltrated: false,
+        otpIntercepted: false,
+        persistenceMechanism: false,
+        overlayAttack: false,
+        dynamicCodeLoading: false
       }
-    ],
-
-    // ── Frida API Hooks Log ────────────────────────────────────────
-    fridaHooks: [
-      { api: 'SmsManager.sendTextMessage',         called: true,  detail: 'Called once — 165.x.x.x destination' },
-      { api: 'TelephonyManager.getDeviceId',        called: true,  detail: 'IMEI captured: 359943...' },
-      { api: 'Cipher.doFinal',                       called: true,  detail: 'AES encryption used — obfuscating payload' },
-      { api: 'Runtime.exec',                         called: false, detail: 'No shell commands executed' },
-      { api: 'DexClassLoader.loadClass',             called: true,  detail: 'Dynamic code loaded from /data/data/com.fakepay/files/payload.dex' }
-    ],
-
-    // ── Pillar 5: Intent Spoofing Results ─────────────────────────
-    // What happened when we LIED to the APK about its environment
-    intentSpoofingResults: {
-      scenario: 'Told the app SMS permission is granted AND device is rooted',
-      baselineBehavior: 'App showed login screen, sent one beacon at T+23s',
-      spoofedBehavior: 'App activated full keylogger, intercepted OTP, sent credentials',
-      behavioralDelta: 'CRITICAL — Hidden payload activated only when conditions are met',
-      hiddenPayloadsRevealed: [
-        'Full keylogger mode (disabled when SMS permission not granted)',
-        'Root exploit attempt (disabled when device not rooted)',
-        'Secondary C2 fallback: http://185.234.219.44/backup'
-      ]
-    },
-
-    // ── Summary ────────────────────────────────────────────────────
-    summary: {
-      totalEvents: 10,
-      criticalEvents: 6,
-      c2Connections: 2,
-      credentialsExfiltrated: true,
-      otpIntercepted: true,
-      persistenceMechanism: true,
-      overlayAttack: true,
-      dynamicCodeLoading: true
+    }
+  } else {
+    // Default Banking Trojan
+    result = {
+      ...result,
+      temporalAttackGraph: [
+        {
+          T: 0,
+          event: 'APP_LAUNCH',
+          description: 'App launched, shows fake HDFC login screen',
+          apiCall: 'Activity.onCreate()',
+          risk: 'low'
+        },
+        {
+          T: 3,
+          event: 'PERMISSION_CHECK',
+          description: 'Checks if SMS permission is granted',
+          apiCall: 'checkSelfPermission(READ_SMS)',
+          risk: 'medium'
+        },
+        {
+          T: 7,
+          event: 'TARGET_APP_SCAN',
+          description: 'Scans for installed banking apps (HDFC, SBI, ICICI, Axis)',
+          apiCall: 'PackageManager.getInstalledPackages()',
+          risk: 'high',
+          detail: 'Found: com.hdfcbank.mobilebanking, com.sbi.mobile'
+        },
+        {
+          T: 12,
+          event: 'CREDENTIALS_CAPTURE',
+          description: 'User enters credentials on fake login screen — captured by keylogger',
+          apiCall: 'EditText.addTextChangedListener()',
+          risk: 'critical',
+          detail: 'Credentials staged for exfiltration'
+        },
+        {
+          T: 15,
+          event: 'SMS_INTERCEPT_ARM',
+          description: 'Registers SMS broadcast receiver — ready to intercept OTPs',
+          apiCall: 'registerReceiver(SmsReceiver, SMS_RECEIVED)',
+          risk: 'critical'
+        },
+        {
+          T: 23,
+          event: 'FIRST_C2_BEACON',
+          description: 'First connection to command-and-control server',
+          apiCall: 'HttpURLConnection.connect()',
+          risk: 'critical',
+          detail: 'POST http://185.234.219.33/collect — device fingerprint sent'
+        },
+        {
+          T: 31,
+          event: 'OTP_INTERCEPT',
+          description: 'Incoming SMS intercepted (bank OTP)',
+          apiCall: 'BroadcastReceiver.onReceive(SMS_RECEIVED)',
+          risk: 'critical',
+          detail: 'OTP hidden from user notifications'
+        },
+        {
+          T: 33,
+          event: 'CREDENTIAL_EXFIL',
+          description: 'Captured credentials + OTP sent to C2 server',
+          apiCall: 'HttpURLConnection.connect()',
+          risk: 'critical',
+          detail: 'POST http://185.234.219.33/collect — 847 bytes'
+        },
+        {
+          T: 45,
+          event: 'OVERLAY_LAUNCH',
+          description: 'SYSTEM_ALERT_WINDOW overlay shown to display fake "processing" screen while fraud occurs',
+          apiCall: 'WindowManager.addView(TYPE_APPLICATION_OVERLAY)',
+          risk: 'critical'
+        },
+        {
+          T: 90,
+          event: 'PERSISTENCE_SETUP',
+          description: 'Boot receiver registered — malware survives device restart',
+          apiCall: 'ACTION_BOOT_COMPLETED registered',
+          risk: 'high'
+        }
+      ],
+      networkActivity: [
+        {
+          timestamp: 'T+23s',
+          method: 'POST',
+          url: 'http://185.234.219.33/collect',
+          size: '312 bytes',
+          payload: '{"device_id":"a3f9b2c1","phone":"91XXXXXXXX10","imei":"3599..."}',
+          classification: 'C2_BEACON'
+        },
+        {
+          timestamp: 'T+33s',
+          method: 'POST',
+          url: 'http://185.234.219.33/collect',
+          size: '847 bytes',
+          payload: '{"user":"test@hdfc","pass":"[CAPTURED]","otp":"247891"}',
+          classification: 'CREDENTIAL_EXFILTRATION'
+        },
+        {
+          timestamp: 'T+61s',
+          method: 'GET',
+          url: 'http://apd-tracking.xyz/log?id=a3f9b2c1',
+          size: '128 bytes',
+          classification: 'TRACKING_PING'
+        }
+      ],
+      fridaHooks: [
+        { api: 'SmsManager.sendTextMessage', called: true, detail: 'Called once — 165.x.x.x destination' },
+        { api: 'TelephonyManager.getDeviceId', called: true, detail: 'IMEI captured: 359943...' },
+        { api: 'Cipher.doFinal', called: true, detail: 'AES encryption used — obfuscating payload' },
+        { api: 'Runtime.exec', called: false, detail: 'No shell commands executed' },
+        { api: 'DexClassLoader.loadClass', called: true, detail: 'Dynamic code loaded from /data/data/com.fakepay/files/payload.dex' }
+      ],
+      intentSpoofingResults: {
+        scenario: 'Told the app SMS permission is granted AND device is rooted',
+        baselineBehavior: 'App showed login screen, sent one beacon at T+23s',
+        spoofedBehavior: 'App activated full keylogger, intercepted OTP, sent credentials',
+        behavioralDelta: 'CRITICAL — Hidden payload activated only when conditions are met',
+        hiddenPayloadsRevealed: [
+          'Full keylogger mode (disabled when SMS permission not granted)',
+          'Root exploit attempt (disabled when device not rooted)',
+          'Secondary C2 fallback: http://185.234.219.44/backup'
+        ]
+      },
+      summary: {
+        totalEvents: 10,
+        criticalEvents: 6,
+        c2Connections: 2,
+        credentialsExfiltrated: true,
+        otpIntercepted: true,
+        persistenceMechanism: true,
+        overlayAttack: true,
+        dynamicCodeLoading: true
+      }
     }
   }
 
   logger.info('Dynamic analysis complete (STUB)', {
     jobId,
+    packageName,
     criticalEvents: result.summary.criticalEvents,
     c2Connections: result.summary.c2Connections
   })
