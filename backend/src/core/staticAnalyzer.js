@@ -54,6 +54,8 @@ async function stubStaticAnalysis(apkPath, jobId) {
   let category = 'trojan' // default
   if (name.includes('zombie') || name.includes('mod') || name.includes('game') || name.includes('hack') || name.includes('castaways') || name.includes('crack') || name.includes('cheat')) {
     category = 'game_mod'
+  } else if (name.includes('credit') || name.includes('card') || name.includes('cc-scam') || name.includes('cc-stealer') || name.includes('scam')) {
+    category = 'cc_scam'
   } else if (name.includes('safe') || name.includes('legit') || name.includes('whatsapp') || name.includes('spotify') || name.includes('chrome') || name.includes('google') || name.includes('facebook') || name.includes('instagram')) {
     category = 'safe'
   }
@@ -122,6 +124,64 @@ async function stubStaticAnalysis(apkPath, jobId) {
         suspiciousStringsCount: 3,
         hasDebugCertificate: false,
         hasC2Communication: false,
+        hasDynamicCodeLoading: false
+      }
+    }
+  } else if (category === 'cc_scam') {
+    result = {
+      ...result,
+      manifest: {
+        packageName: 'com.securepay.visa.verify',
+        appName: 'Visa Secure Pay',
+        versionName: '1.0.4',
+        versionCode: 104,
+        minSdkVersion: 21,
+        targetSdkVersion: 33,
+        permissions: [
+          { name: 'android.permission.INTERNET', risk: 'low', reason: 'Outbound network communication' },
+          { name: 'android.permission.ACCESS_NETWORK_STATE', risk: 'low', reason: 'Check network connectivity' },
+          { name: 'android.permission.CAMERA', risk: 'medium', reason: 'Allows scanning credit card details via OCR' },
+          { name: 'android.permission.SYSTEM_ALERT_WINDOW', risk: 'critical', reason: 'Used to draw overlay fields on top of legitimate apps' }
+        ],
+        activities: [
+          'com.securepay.visa.verify.MainActivity',
+          'com.securepay.visa.verify.CardCaptureActivity'
+        ],
+        services: [
+          'com.securepay.visa.verify.DataExfiltrationService'
+        ],
+        receivers: []
+      },
+      suspiciousStrings: [
+        { value: 'http://192.168.1.100/submit_card', type: 'hardcoded_c2_url', risk: 'critical' },
+        { value: 'card_number', type: 'pii_field', risk: 'high' },
+        { value: 'cvv', type: 'pii_field', risk: 'critical' },
+        { value: 'expiry_date', type: 'pii_field', risk: 'high' },
+        { value: 'cardholder_name', type: 'pii_field', risk: 'medium' }
+      ],
+      certificate: {
+        issuer: 'CN=Visa Developer Test, O=Visa Development, C=US',
+        subjectCN: 'Visa Developer Test',
+        validFrom: '2023-01-01',
+        validTo: '2033-01-01',
+        isDebugCert: true,
+        isExpired: false,
+        sha256: 'f5d6e7f8a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4'
+      },
+      claimedIdentity: {
+        name: 'Visa Secure Pay',
+        packageName: 'com.securepay.visa.verify',
+        realPackageName: 'com.visa.developer.verify',
+        isKnownBrand: true,
+        brandName: 'Visa'
+      },
+      summary: {
+        totalPermissions: 4,
+        criticalPermissions: 1,
+        highRiskPermissions: 0,
+        suspiciousStringsCount: 5,
+        hasDebugCertificate: true,
+        hasC2Communication: true,
         hasDynamicCodeLoading: false
       }
     }

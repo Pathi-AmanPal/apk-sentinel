@@ -158,6 +158,74 @@ async function stubDynamicAnalysis(apkPath, jobId, staticResults) {
         dynamicCodeLoading: false
       }
     }
+  } else if (packageName === 'com.securepay.visa.verify') {
+    result = {
+      ...result,
+      temporalAttackGraph: [
+        {
+          T: 0,
+          event: 'APP_LAUNCH',
+          description: 'App launched, displays credit card details entry form',
+          apiCall: 'CardCaptureActivity.onCreate()',
+          risk: 'low'
+        },
+        {
+          T: 5,
+          event: 'FORM_SHOWN',
+          description: 'Prompts user to verify identity by entering 16-digit credit card number, CVV, and expiration date',
+          apiCall: 'EditText.addTextChangedListener()',
+          risk: 'medium'
+        },
+        {
+          T: 12,
+          event: 'CARD_CAPTURE',
+          description: 'Captured keystrokes of credit card fields (number, CVV, expiry) staging in local buffer',
+          apiCall: 'String.valueOf()',
+          risk: 'critical',
+          detail: 'PII credentials harvested'
+        },
+        {
+          T: 20,
+          event: 'EXFILTRATION',
+          description: 'Exfiltrates credit card details to unauthorized backend: http://192.168.1.100/submit_card',
+          apiCall: 'HttpURLConnection.connect()',
+          risk: 'critical',
+          detail: 'POST http://192.168.1.100/submit_card'
+        }
+      ],
+      networkActivity: [
+        {
+          timestamp: 'T+20s',
+          method: 'POST',
+          url: 'http://192.168.1.100/submit_card',
+          size: '512 bytes',
+          payload: '{"card_num":"[CAPTURED]","cvv":"[CAPTURED]","expiry":"[CAPTURED]"}',
+          classification: 'PII_EXFILTRATION'
+        }
+      ],
+      fridaHooks: [
+        { api: 'TelephonyManager.getDeviceId', called: true, detail: 'IMEI read by DataExfiltrationService' },
+        { api: 'Cipher.doFinal', called: true, detail: 'AES encryption used before exfiltration' },
+        { api: 'SmsManager.sendTextMessage', called: false, detail: 'No SMS actions performed' }
+      ],
+      intentSpoofingResults: {
+        scenario: 'Told the app network is restricted',
+        baselineBehavior: 'App immediately attempts post to http://192.168.1.100/submit_card',
+        spoofedBehavior: 'App stores harvested credit card details locally inside sqlite cache and waits for connection',
+        behavioralDelta: 'HIGH — Offline exfiltration queue enabled',
+        hiddenPayloadsRevealed: ['Local cached database storage logic']
+      },
+      summary: {
+        totalEvents: 4,
+        criticalEvents: 2,
+        c2Connections: 1,
+        credentialsExfiltrated: true,
+        otpIntercepted: false,
+        persistenceMechanism: false,
+        overlayAttack: true,
+        dynamicCodeLoading: false
+      }
+    }
   } else if (packageName.includes('spotify') || packageName.includes('whatsapp')) {
     const isSpotify = packageName.includes('spotify')
     result = {

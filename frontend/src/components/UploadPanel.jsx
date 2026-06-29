@@ -97,9 +97,11 @@ export default function UploadPanel({ onSubmit, disabled, error }) {
         {disabled ? 'Submitting…' : 'Open case — begin analysis'}
       </button>
 
-      <div style={{ marginTop: 22, textAlign: 'center' }}>
+      <div style={{ marginTop: 22, textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
         <span className="mono" style={{ fontSize: 12, color: 'var(--text-dim)' }}>
-          Need a test file?{' '}
+          Need a test file? Download:
+        </span>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
           <a
             href="/demo.apk"
             download="demo.apk"
@@ -108,12 +110,28 @@ export default function UploadPanel({ onSubmit, disabled, error }) {
               color: 'var(--accent)',
               textDecoration: 'underline',
               cursor: 'pointer',
-              fontWeight: 500
+              fontWeight: 500,
+              fontSize: 12
             }}
           >
-            Download Demo APK (10 KB)
+            ↓ Banking Trojan APK (10 KB)
           </a>
-        </span>
+          <span style={{ color: 'var(--border)', fontSize: 12 }}>|</span>
+          <a
+            href="/creditcard-scam.apk"
+            download="creditcard-scam.apk"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              color: 'var(--accent)',
+              textDecoration: 'underline',
+              cursor: 'pointer',
+              fontWeight: 500,
+              fontSize: 12
+            }}
+          >
+            ↓ Credit Card Scam APK (10 KB)
+          </a>
+        </div>
       </div>
     </div>
   )
