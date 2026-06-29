@@ -1,7 +1,7 @@
 {
   "version": 2,
   "buildCommand": "cd frontend && npm install && npm run build && cd ../backend && npm install",
-  "outputDirectory": "frontend/dist",
+  "outputDirectory": "backend/public",
   "functions": {
     "api/index.js": {
       "memory": 1024,
