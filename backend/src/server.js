@@ -74,14 +74,14 @@ app.use((req, res, next) => {
 app.use('/api', analysisRoutes)
 
 // Serve frontend static assets
-app.use(express.static(path.join(__dirname, '../public')))
+app.use(express.static(path.join(process.cwd(), 'backend/public')))
 
 // Send index.html for all other routes to support React SPA client-side routing
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api')) {
     return next()
   }
-  res.sendFile(path.join(__dirname, '../public/index.html'))
+  res.sendFile(path.join(process.cwd(), 'backend/public/index.html'))
 })
 
 // ── 5. Global Error Handler ────────────────────────────────────────
