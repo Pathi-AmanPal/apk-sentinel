@@ -2,6 +2,7 @@
   "name": "apk-sentinel-monorepo",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "vercel-build": "cd frontend && npm install && npm run build && cd ../backend && npm install"
   }
