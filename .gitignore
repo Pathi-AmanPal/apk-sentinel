@@ -16,6 +16,8 @@ logs/
 *.log
 backend/uploads/
 backend/output/
+backend/public/
+frontend/dist/
 
 # OS / Editor files
 .DS_Store

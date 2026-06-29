@@ -6,7 +6,7 @@
 //   GET  /api/report/:jobId  -> { report } | PDF download
 // =============================================
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api'
+const API_URL = import.meta.env.VITE_API_URL || '/api'
 
 async function asJson(res) {
   const data = await res.json().catch(() => null)

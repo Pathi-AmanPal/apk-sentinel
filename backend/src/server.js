@@ -23,9 +23,14 @@ import 'dotenv/config'               // Load .env file into process.env
 import express from 'express'
 import cors from 'cors'
 import { mkdirSync } from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
 import logger from './utils/logger.js'
 import analysisRoutes from './routes/analysis.js'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 // ── 1. Create the app ──────────────────────────────────────────────
 const app = express()
@@ -65,18 +70,15 @@ app.use((req, res, next) => {
 // So: POST /api/analyze, GET /api/status/:id, GET /api/report/:id
 app.use('/api', analysisRoutes)
 
-// Root route — just to confirm the server is alive
-app.get('/', (req, res) => {
-  res.json({
-    name: 'APK Sentinel API',
-    version: '1.0.0',
-    status: 'running',
-    docs: {
-      upload: 'POST /api/analyze',
-      status: 'GET /api/status/:jobId',
-      report: 'GET /api/report/:jobId'
-    }
-  })
+// Serve frontend static assets
+app.use(express.static(path.join(__dirname, '../public')))
+
+// Send index.html for all other routes to support React SPA client-side routing
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return next()
+  }
+  res.sendFile(path.join(__dirname, '../public/index.html'))
 })
 
 // ── 5. Global Error Handler ────────────────────────────────────────

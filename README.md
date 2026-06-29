@@ -13,11 +13,17 @@ apk-sentinel/
 │   │   ├── core/             # Static, dynamic, and GenAI engines
 │   │   ├── db/               # Vector similarity matching (Qdrant)
 │   │   ├── routes/           # REST endpoints
-│   │   └── server.js         # Entry point
+│   │   └── server.js         # Entry point (serves public frontend)
 │   ├── tools/                # Frida instrumentation scripts
-│   ├── vercel.json           # Serverless execution directives
+│   ├── uploads/              # Local upload storage (ignored)
 │   └── package.json
-└── frontend/                 # Workspace reserved for React/Next.js dashboard
+├── frontend/                 # Vite + React dashboard console
+│   ├── src/                  # React dashboard components
+│   ├── index.html
+│   ├── vite.config.js        # Output redirection & API dev proxy
+│   └── package.json
+├── package.json              # Monorepo build coordinator
+└── vercel.json               # Unified Vercel deployment configuration
 ```
 
 ---
@@ -36,11 +42,12 @@ apk-sentinel/
 
 ---
 
-## ⚡ Serverless & Vercel Optimized
+## ⚡ Unified Vercel Deployment
 
-The backend is fully optimized for stateless execution lifecycles:
-1. **Dynamic Path Mapping**: Resolves upload and report files to `/tmp` automatically when running inside Vercel, bypassing read-only filesystem restrictions.
-2. **Resilient Job Store**: Uses a hybrid file-persisted state-recovery mechanism so polling client requests resolve correctly even if a serverless container warm-restarts.
+This repository is optimized to deploy both the backend Express server and the React/Vite frontend as a single, unified project on Vercel:
+1. **Zero CORS Headaches**: The Vite production build compiles directly into `backend/public/`, allowing the Express backend to serve it statically.
+2. **Serverless Directory Resolution**: Resolves uploads and reports to `/tmp` automatically when running inside Vercel, bypassing read-only filesystem restrictions.
+3. **Resilient Job Store**: Uses a hybrid file-persisted state-recovery mechanism so polling client requests resolve correctly even if a serverless container warm-restarts.
 
 ---
 
@@ -101,29 +108,31 @@ All backend routes are prefixed with `/api`.
 
 ## 🛠️ Local Development Setup
 
-### Backend Setup
+To run the application locally, you will run the backend and the frontend development servers concurrently.
 
-1. **Navigate and Install**:
-   ```bash
-   cd backend
-   npm install
-   ```
-2. **Environment Configuration**:
-   Create a `.env` file from the example template:
-   ```bash
-   cp .env.example .env
-   ```
-   Add your keys:
-   ```env
-   PORT=3000
-   GEMINI_API_KEY=your_gemini_api_key
-   STUB_ANALYSIS=true  # Set to false to invoke local JADX & Frida tools
-   ```
-3. **Run Dev Server**:
-   ```bash
-   npm run dev
-   ```
+### 1. Environment Configuration
 
-### Frontend Setup
+Create a `.env` file in the `backend/` directory:
+```env
+PORT=3000
+GEMINI_API_KEY=your_gemini_api_key
+STUB_ANALYSIS=true  # Set to false to invoke local JADX & Frida tools
+```
 
-Initialize your React or Next.js app inside the `frontend/` directory, pointing HTTP requests to `http://localhost:3000/api`.
+### 2. Run Backend Security Engine
+
+```bash
+cd backend
+npm install
+npm run dev
+```
+The backend API server will run at `http://localhost:3000`.
+
+### 3. Run Frontend Dashboard Console
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+The Vite development server will run at `http://localhost:5173`. Any API calls to `/api` will be proxied automatically to the backend on port `3000`.
