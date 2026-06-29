@@ -38,8 +38,11 @@ const PORT = process.env.PORT || 3000
 
 // ── 2. Ensure required directories exist ──────────────────────────
 // If the uploads/ or output/ folders don't exist, create them
-mkdirSync(process.env.UPLOAD_DIR || './uploads', { recursive: true })
-mkdirSync(process.env.OUTPUT_DIR || './output', { recursive: true })
+const isVercel = !!process.env.VERCEL
+const uploadDir = isVercel ? '/tmp' : (process.env.UPLOAD_DIR || './uploads')
+const outputDir = isVercel ? '/tmp' : (process.env.OUTPUT_DIR || './output')
+mkdirSync(uploadDir, { recursive: true })
+mkdirSync(outputDir, { recursive: true })
 
 // ── 3. Register Middleware ─────────────────────────────────────────
 
