@@ -112,27 +112,39 @@ const upload = multer({
 // ── Route 1: POST /api/analyze ─────────────────────────────────────
 router.post('/analyze', upload.single('apk'), async (req, res) => {
   try {
-    if (!req.file) {
+    const jobId = uuidv4()
+    let filename
+    let filePath
+    let fileSizeStr
+
+    if (req.file) {
+      filename = req.file.originalname
+      filePath = req.file.path
+      fileSizeStr = `${(req.file.size / 1024 / 1024).toFixed(2)} MB`
+    } else if (req.body && req.body.filename) {
+      filename = req.body.filename
+      filePath = path.join(uploadDir, `stub-${jobId}-${filename}`)
+      const sizeBytes = req.body.fileSize || 0
+      fileSizeStr = `${(sizeBytes / 1024 / 1024).toFixed(2)} MB`
+    } else {
       return res.status(400).json({
         success: false,
-        error: 'No APK file uploaded. Send a file in the "apk" field.'
+        error: 'No APK file uploaded and no filename metadata provided.'
       })
     }
 
-    const jobId = uuidv4()
-
-    logger.info('APK uploaded, starting analysis job', {
+    logger.info('APK target identified, starting analysis job', {
       jobId,
-      filename: req.file.originalname,
-      size: `${(req.file.size / 1024 / 1024).toFixed(2)} MB`
+      filename,
+      size: fileSizeStr
     })
 
     // Store active state in memory initially
     jobStore.set(jobId, {
       status: 'active',
       progress: 0,
-      filename: req.file.originalname,
-      filePath: req.file.path,
+      filename,
+      filePath,
       createdAt: new Date().toISOString(),
       result: null,
       error: null
@@ -141,12 +153,12 @@ router.post('/analyze', upload.single('apk'), async (req, res) => {
     // Run pipeline synchronously on the request
     let result
     try {
-      result = await runPipeline(jobId, req.file.path, req.file.originalname, () => {})
+      result = await runPipeline(jobId, filePath, filename, () => {})
       jobStore.set(jobId, {
         status: 'completed',
         progress: 100,
-        filename: req.file.originalname,
-        filePath: req.file.path,
+        filename,
+        filePath,
         createdAt: new Date().toISOString(),
         result,
         error: null
@@ -156,8 +168,8 @@ router.post('/analyze', upload.single('apk'), async (req, res) => {
       jobStore.set(jobId, {
         status: 'failed',
         progress: 0,
-        filename: req.file.originalname,
-        filePath: req.file.path,
+        filename,
+        filePath,
         createdAt: new Date().toISOString(),
         result: null,
         error: err.message
@@ -175,7 +187,7 @@ router.post('/analyze', upload.single('apk'), async (req, res) => {
     })
 
   } catch (error) {
-    logger.error('Upload failed', { error: error.message })
+    logger.error('Upload/analysis failed', { error: error.message })
     res.status(500).json({ success: false, error: error.message })
   }
 })

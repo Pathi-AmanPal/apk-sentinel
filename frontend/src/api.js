@@ -18,6 +18,22 @@ async function asJson(res) {
 }
 
 export async function uploadApk(file) {
+  // If file size exceeds 4MB, send metadata instead of the whole file
+  // to bypass Vercel's 4.5MB payload limit
+  if (file.size > 4 * 1024 * 1024) {
+    const res = await fetch(`${API_URL}/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        filename: file.name,
+        fileSize: file.size
+      })
+    })
+    return asJson(res)
+  }
+
   const form = new FormData()
   form.append('apk', file)
   const res = await fetch(`${API_URL}/analyze`, { method: 'POST', body: form })
